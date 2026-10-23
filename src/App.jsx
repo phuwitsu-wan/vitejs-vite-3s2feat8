@@ -94,6 +94,7 @@ export default function App() {
     let dead = false;
     const run = async function () {
       let rows = [];
+      try { await syncPendingReports(); } catch (e) { /* ignore */ }
       try { rows = await fetchNearby(plot, 5, 14); } catch (e) { rows = []; }
       if (dead) return;
       const same = rows.filter(function (x) { return x.crop === plot.crop; });
@@ -124,6 +125,18 @@ export default function App() {
   const firstDataRef = useRef(true);
   const [bkDismissed, setBkDismissed] = useState(false);
   const [plotMenu, setPlotMenu] = useState(false);
+  // แจ้งเตือนในแอป (ใช้ได้แม้เปิดผ่านแอป LINE ที่ไม่รองรับ Notification ของเบราว์เซอร์)
+  const [toasts, setToasts] = useState([]);
+  useEffect(function () {
+    const onToast = function (ev) {
+      const d = ev.detail || {};
+      const id = d.at + '-' + Math.random().toString(36).slice(2, 6);
+      setToasts(function (prev) { return prev.concat([{ id: id, title: d.title, body: d.body, tab: d.tab }]).slice(-3); });
+      setTimeout(function () { setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id; }); }); }, 9000);
+    };
+    window.addEventListener('cs-toast', onToast);
+    return function () { window.removeEventListener('cs-toast', onToast); };
+  }, []);
   const switchRef = useRef(null);
   // เลื่อนแถบแปลงให้เห็นแปลงที่เลือกอยู่เสมอ
   useEffect(function () {
@@ -195,6 +208,8 @@ export default function App() {
     const plot = Object.assign({}, p, { id: store.uuid(), createdAt: Date.now() });
     setPlots(function (prev) { return prev.concat([plot]); });
     setActivePlotId(plot.id);
+    // สร้างแปลงครั้งแรก/ครั้งใหม่ บันทึกผู้ใช้ลงชีตทันที ไม่ต้องรอ
+    syncUser(plots.concat([plot]));
     if (p.plantedAt) {
       setActivities(function (prev) {
         return [{ id: store.uuid(), plotId: plot.id, type: 'plant', date: p.plantedAt, note: 'เริ่มรอบการผลิต ' + CROPS[p.crop].name, createdAt: Date.now() }].concat(prev);
@@ -281,6 +296,23 @@ export default function App() {
         </div>
       )}
 
+      {toasts.length > 0 && (
+        <div className="toast-stack">
+          {toasts.map(function (t) {
+            return (
+              <div key={t.id} className="toast" onClick={function () {
+                if (t.tab) setTab(t.tab);
+                setToasts(function (prev) { return prev.filter(function (x) { return x.id !== t.id; }); });
+              }}>
+                <b>{'\u{1F6A8}'} {t.title}</b>
+                <div className="small">{t.body}</div>
+                {t.tab ? <div className="small muted">แตะเพื่อดูรายละเอียด</div> : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <main className="content">
         {noPlots || tab === 'plots' ? (
           <PlotsView plots={plots} activePlotId={activePlot ? activePlot.id : null} activities={activities}
@@ -308,7 +340,7 @@ export default function App() {
           {TABS.map(function (t) {
             return (
               <button key={t.key} className={'tab ' + (tab === t.key ? 'tab-active' : '')} onClick={function () { setTab(t.key); }}>
-                <span className="tab-icon">{t.emoji}</span><span>{t.label}</span>
+                <span className="tab-icon">{t.emoji}{t.key === 'area' && nearby.length > 0 ? <i className="tab-dot" /> : null}</span><span>{t.label}</span>
               </button>
             );
           })}

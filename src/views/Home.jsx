@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { TASK_META } from '../data/crops.js';
 import { thaiDate, relativeLabel, today, diffDays } from '../lib/date.js';
 import { weatherIcon } from '../lib/weather.js';
-import { shareText } from '../lib/liff.js';
+import { openExternal } from '../lib/liff.js';
 import { RULE_SOURCE } from '../data/alertRules.js';
-import { notifySupported, notifyStatus, requestNotify, notifyEnabled, setNotifyEnabled, testNotify } from '../lib/notify.js';
+import { notifySupported, notifyStatus, requestNotify, notifyEnabled, setNotifyEnabled, testNotify, notifyMode } from '../lib/notify.js';
 import WaterChart from './WaterChart.jsx';
 import StageBar from './StageBar.jsx';
 import PestImage from './PestImage.jsx';
@@ -17,6 +17,7 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
   const [showWaterTable, setShowWaterTable] = useState(false);
   const [showSoil, setShowSoil] = useState(false);
   const [notifyOn, setNotifyOnState] = useState(notifyEnabled());
+  const [, setTick] = useState(0);
 
   if (!plot) return <div className="card">ยังไม่ได้เลือกแปลง</div>;
   if (loading && !derived) return <div className="card skeleton">กำลังประมวลผลสภาพอากาศของแปลง</div>;
@@ -51,28 +52,16 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
     window.alert('บันทึกกิจกรรมเรียบร้อย');
   };
 
-  const toggleNotify = async function () {
-    if (!notifySupported()) { window.alert('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน'); return; }
-    if (notifyStatus() !== 'granted') {
-      const p = await requestNotify();
-      if (p !== 'granted') { window.alert('ยังไม่ได้รับอนุญาตให้แจ้งเตือน กรุณาเปิดสิทธิ์ในตั้งค่าเบราว์เซอร์'); return; }
-      setNotifyOnState(true);
-      return;
-    }
+  const toggleNotify = function () {
     const next = !notifyOn;
     setNotifyEnabled(next);
     setNotifyOnState(next);
   };
 
-  const shareAlert = function (a) {
-    const L = [];
-    L.push('[' + a.levelLabel + '] ' + a.name);
-    L.push('แปลง ' + plot.name + ' พืช ' + crop.name + ' ระยะ ' + stageInfo.stage.name);
-    L.push('สถานะ ' + a.progress);
-    L.push('เงื่อนไขเสี่ยง ' + a.risk);
-    L.push('สิ่งที่ควรทำ');
-    for (let i = 0; i < a.act.length; i++) L.push(' - ' + a.act[i]);
-    shareText(L.join('\n'));
+  const askNative = async function () {
+    await requestNotify();
+    setNotifyOnState(notifyEnabled());
+    setTick(function (n) { return n + 1; });
   };
 
   const renderAlert = function (a) {
@@ -109,7 +98,6 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
               </>
             )}
             <div className="row gap mt">
-              <button className="btn btn-sm" onClick={function () { shareAlert(a); }}>ส่งเข้าไลน์</button>
               <button className="btn btn-sm btn-ghost" onClick={function () { quickLog('scout'); }}>บันทึกว่าสำรวจแล้ว</button>
             </div>
             <div className="small muted mt">ระดับความมั่นใจของเกณฑ์ {a.conf} ({a.confLabel})</div>
@@ -316,19 +304,32 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
 
         <div className="notify-row">
           <div className="flex1">
-            <b className="small">แจ้งเตือนผ่านเบราว์เซอร์</b>
+            <b className="small">การแจ้งเตือน</b>
             <div className="small muted">
-              เปิดไว้เพื่อให้ระบบส่งแจ้งเตือนขึ้นหน้าจอทันทีเมื่อมีโรคหรือแมลงเข้าเกณฑ์เฝ้าระวัง
+              เปิดไว้เพื่อให้ระบบแจ้งเตือนเมื่อมีโรคหรือแมลงเข้าเกณฑ์เฝ้าระวัง และเมื่อมีรายงานระบาดใหม่ใกล้แปลง
             </div>
+            {notifyMode() === 'inapp' && (
+              <div className="small notify-note">
+                เปิดผ่านแอป LINE จะแจ้งเตือนเป็นป๊อปอัปภายในแอปเมื่อคุณเปิดแอปอยู่ ถ้าต้องการให้เด้งเตือนที่หน้าจอเครื่องแม้ไม่ได้เปิดแอป ให้เปิดแอปนี้ผ่านเบราว์เซอร์ Chrome
+                <button className="btn btn-sm" style={{ marginLeft: 6 }} onClick={function () { openExternal(window.location.href); }}>เปิดในเบราว์เซอร์</button>
+              </div>
+            )}
+            {notifyMode() === 'ask' && (
+              <div className="small notify-note">
+                ตอนนี้แจ้งเตือนเป็นป๊อปอัปในแอป ถ้าอยากให้เด้งเตือนที่หน้าจอเครื่องด้วย
+                <button className="btn btn-sm" style={{ marginLeft: 6 }} onClick={askNative}>อนุญาตแจ้งเตือนของเครื่อง</button>
+              </div>
+            )}
+            {notifyMode() === 'blocked' && (
+              <div className="small notify-note">เครื่องนี้บล็อกการแจ้งเตือนของเว็บไว้ ระบบจะแจ้งเตือนภายในแอปแทน (ถ้าต้องการแจ้งเตือนของเครื่อง ให้เปิดสิทธิ์ในตั้งค่าเว็บไซต์ของเบราว์เซอร์)</div>
+            )}
           </div>
           <button className={'toggle ' + (notifyOn ? 'toggle-on' : '')} onClick={toggleNotify}>
             {notifyOn ? 'เปิดอยู่' : 'ปิดอยู่'}
           </button>
         </div>
         {notifyOn && (
-          <button className="btn btn-sm w-full mt" onClick={function () {
-            if (!testNotify()) window.alert('ส่งการแจ้งเตือนไม่สำเร็จ');
-          }}>ทดสอบการแจ้งเตือน</button>
+          <button className="btn btn-sm w-full mt" onClick={function () { testNotify(); }}>ทดสอบการแจ้งเตือน</button>
         )}
 
         {stageInfo.afterHarvest && (
