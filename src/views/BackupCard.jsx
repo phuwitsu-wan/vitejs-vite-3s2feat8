@@ -4,7 +4,7 @@ import {
   cloudBackup, cloudFetch, adoptCode, formatCode, normalizeCode,
   saveBackupFile, readBackupFile
 } from '../lib/backup.js';
-import { copyToClipboard } from '../lib/platform.js';
+import { exportBackup, parseBackup } from '../lib/storage.js';
 
 function when(ms) {
   if (!ms) return 'ยังไม่เคยสำรอง';
@@ -22,6 +22,8 @@ export default function BackupCard({ plots, activities, onRestore }) {
   const [msg, setMsg] = useState(null);
   const [codeInput, setCodeInput] = useState('');
   const [found, setFound] = useState(null); // { data, at, code }
+  const [showText, setShowText] = useState(false);
+  const [text, setText] = useState('');
   const fileRef = useRef(null);
 
   const hasData = plots.length > 0;
@@ -44,7 +46,8 @@ export default function BackupCard({ plots, activities, onRestore }) {
 
   const copyCode = function () {
     const t = formatCode(code);
-    copyToClipboard(t).then(function (ok) { say(ok ? 'ok' : 'warn', ok ? 'คัดลอกรหัส ' + t + ' แล้ว' : 'คัดลอกไม่สำเร็จ กรุณากดค้างที่รหัสเพื่อคัดลอกเอง'); });
+    try { if (navigator.clipboard) navigator.clipboard.writeText(t); } catch (e) { /* ignore */ }
+    say('ok', 'คัดลอกรหัส ' + t + ' แล้ว');
   };
 
   const toggleAuto = function () {
@@ -85,6 +88,12 @@ export default function BackupCard({ plots, activities, onRestore }) {
     const r = await readBackupFile(f);
     if (r.ok) setFound({ data: r.data, at: 0, code: '' });
     else say('warn', 'ไฟล์นี้ไม่ใช่ไฟล์สำรองของแอป หรือไฟล์เสียหาย');
+  };
+
+  const textRestore = function () {
+    const parsed = parseBackup(text);
+    if (!parsed) { say('warn', 'ข้อความสำรองไม่ถูกต้อง'); return; }
+    setFound({ data: parsed, at: 0, code: '' });
   };
 
   return (
@@ -167,6 +176,21 @@ export default function BackupCard({ plots, activities, onRestore }) {
         <button className="btn w-full mt" onClick={function () { fileRef.current.click(); }}>เลือกไฟล์สำรอง</button>
       </div>
 
+      <button className="bk-link" onClick={function () { setShowText(!showText); if (!showText) setText(exportBackup(plots, activities)); }}>
+        {showText ? 'ซ่อนตัวเลือกขั้นสูง' : 'ตัวเลือกขั้นสูง (คัดลอก/วางเป็นข้อความ)'}
+      </button>
+      {showText && (
+        <div className="mt">
+          <textarea rows="4" value={text} onChange={function (e) { setText(e.target.value); }} />
+          <div className="row gap mt">
+            <button className="btn btn-sm flex1" onClick={function () {
+              try { if (navigator.clipboard) navigator.clipboard.writeText(text); } catch (e) { /* ignore */ }
+              say('ok', 'คัดลอกข้อความสำรองแล้ว');
+            }}>คัดลอก</button>
+            <button className="btn btn-sm flex1" onClick={textRestore}>กู้คืนจากข้อความนี้</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

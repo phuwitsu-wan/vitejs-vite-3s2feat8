@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CROP_LIST, CROPS, WATER_MODES } from '../data/crops.js';
 import { today, thaiDate } from '../lib/date.js';
-import LocationPicker from './LocationPicker.jsx';
+import { getPosition, reverseGeocode } from '../lib/weather.js';
 import { storageInfo } from '../lib/storage.js';
 import BackupCard from './BackupCard.jsx';
 import { utmToLatLon } from '../lib/utm.js';
@@ -39,6 +39,18 @@ export default function PlotsView({ plots, activePlotId, onAdd, onRemove, onSele
     }
     setForm(function (f) { return Object.assign({}, f, { lat: r.lat, lon: r.lon }); });
     setUtmMsg('แปลงเป็น ละติจูด ' + r.lat + ', ลองจิจูด ' + r.lon + ' แล้ว');
+  };
+
+  const locate = async function () {
+    setGeoMsg('กำลังอ่านตำแหน่งจากมือถือ');
+    try {
+      const pos = await getPosition();
+      const name = await reverseGeocode(pos.lat, pos.lon);
+      setForm(function (f) { return Object.assign({}, f, { lat: pos.lat, lon: pos.lon, locationName: name || '' }); });
+      setGeoMsg('ได้ตำแหน่งแล้ว ความแม่นยำประมาณ ' + Math.round(pos.acc) + ' เมตร' + (name ? ' · ' + name : ''));
+    } catch (e) {
+      setGeoMsg('อ่านตำแหน่งไม่สำเร็จ กรุณาอนุญาตการเข้าถึงตำแหน่ง หรือกรอกพิกัดเอง');
+    }
   };
 
   const submit = function (e) {
@@ -141,8 +153,8 @@ export default function PlotsView({ plots, activePlotId, onAdd, onRemove, onSele
 
             <div className="field">
               <span>ตำแหน่งแปลง ใช้ดึงข้อมูลอากาศและข้อมูลดินเฉพาะจุด</span>
-              <LocationPicker lat={form.lat} lon={form.lon}
-                onPick={function (la, lo, name) { setForm(function (f) { return Object.assign({}, f, { lat: la, lon: lo, locationName: name || f.locationName || '' }); }); }} />
+              <button type="button" className="btn w-full" onClick={locate}>ใช้ตำแหน่งปัจจุบันจากมือถือ</button>
+              {geoMsg ? <div className="small geo-msg">{geoMsg}</div> : null}
 
               <div className="seg mt">
                 <button type="button" className={'seg-btn ' + (coordMode === 'latlon' ? 'seg-active' : '')}
@@ -187,6 +199,14 @@ export default function PlotsView({ plots, activePlotId, onAdd, onRemove, onSele
           </form>
         </section>
       )}
+
+      <section className="card">
+        <div className="card-title">การเก็บข้อมูล</div>
+        <p className="small muted">
+          ข้อมูลแปลงและบันทึกกิจกรรมถูกบันทึกอัตโนมัติในเครื่องของคุณ
+          เปิดแอปครั้งถัดไปข้อมูลยังอยู่ครบ ขณะนี้ใช้พื้นที่ {info.kb} กิโลไบต์
+        </p>
+      </section>
 
       <BackupCard plots={plots} activities={activities} onRestore={onRestore} />
 

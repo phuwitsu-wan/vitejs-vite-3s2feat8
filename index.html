@@ -9,31 +9,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <script>
-      // ตัวช่วยตรวจปัญหา: ถ้าแอปเริ่มไม่ขึ้น (หน้าขาว) จะแสดงข้อความ error บนหน้าจอให้ถ่ายภาพส่งต่อได้
-      (function () {
-        var errs = [];
-        function show() {
-          var root = document.getElementById('root');
-          if (!root || (root.children.length && !document.getElementById('cs-diag'))) return;
-          var box = document.getElementById('cs-diag') || document.createElement('div');
-          box.id = 'cs-diag';
-          box.style.cssText = 'font:14px/1.5 sans-serif;padding:16px;margin:16px;border:2px solid #E53935;border-radius:12px;background:#FFF1F0;color:#222;word-break:break-word';
-          box.innerHTML = '<b>แอปเริ่มทำงานไม่สำเร็จ</b><br>กรุณาถ่ายภาพหน้าจอนี้ส่งให้ผู้พัฒนา<br><br>' +
-            (errs.length ? errs.join('<br><br>') : 'ไม่พบข้อความ error (อาจโหลดไฟล์แอปไม่สำเร็จ ลองรีเฟรชหรือเปิดด้วยแท็บไม่ระบุตัวตน)') +
-            '<br><br><small>' + navigator.userAgent + '</small>';
-          if (!box.parentNode) (root.parentNode || document.body).insertBefore(box, root);
-        }
-        function add(t) { errs.push(String(t).replace(/</g, '&lt;').slice(0, 400)); if (errs.length < 6) setTimeout(show, 1500); }
-        window.addEventListener('error', function (e) {
-          var t = e.target;
-          if (t && (t.src || t.href) && t !== window) add('โหลดไฟล์ไม่สำเร็จ: ' + (t.src || t.href));
-          else add((e.message || 'error') + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : ''));
-        }, true);
-        window.addEventListener('unhandledrejection', function (e) { add('Promise: ' + (e.reason && (e.reason.message || e.reason))); });
-        setTimeout(function () { var r = document.getElementById('root'); if (r && !r.children.length) show(); }, 8000);
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

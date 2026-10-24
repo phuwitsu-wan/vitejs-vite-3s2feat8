@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchNearby, summarizeNearby, reportOutbreak, resolveReport, myActiveReports, communityMode, checkServer, serverTestUrl, getNearbyStatus, pendingReportCount, syncPendingReports } from '../lib/community.js';
+import { fetchNearby, summarizeNearby, reportOutbreak, resolveReport, myActiveReports, communityMode, checkServer, getNearbyStatus, pendingReportCount, syncPendingReports } from '../lib/community.js';
 import OutbreakMap from './OutbreakMap.jsx';
 import { SCOUT_TARGETS } from '../data/scoutTargets.js';
 import { today, thaiDate } from '../lib/date.js';
@@ -134,11 +134,6 @@ export default function CommunityView({ plot, derived, onReported }) {
               <div className="small srv-warn">
                 มีรายงานของคุณ {pend} รายการที่ยังไม่ถึงเซิร์ฟเวอร์ เพื่อนบ้านจึงยังมองไม่เห็น
                 <button className="btn btn-sm" disabled={checking} onClick={retryPending} style={{ marginLeft: 8 }}>ส่งอีกครั้ง</button>
-              </div>
-            )}
-            {server && server.state !== 'ok' && (
-              <div className="small muted">
-                สำหรับผู้ดูแลระบบ: เปิด <a href={serverTestUrl()} target="_blank" rel="noreferrer">ลิงก์ทดสอบเซิร์ฟเวอร์</a> ถ้าเห็นข้อความที่ขึ้นต้นด้วย {'{"ok":true'} แปลว่าสคริปต์ทำงานปกติ
               </div>
             )}
             <button className="bk-link" disabled={checking} onClick={function () { runCheck(); load(radius); }}>

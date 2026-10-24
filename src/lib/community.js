@@ -5,9 +5,7 @@
 import { reverseProvince } from './weather.js';
 import { CROPS } from '../data/crops.js';
 
-import { API, callApi, diagnoseApi, MIN_SERVER_VERSION } from './api.js';
-
-export function serverTestUrl() { return API ? API + (API.indexOf('?') >= 0 ? '&' : '?') + 'action=ping' : ''; }
+import { API, callApi, MIN_SERVER_VERSION } from './api.js';
 const LOCAL_KEY = 'cs_community_local';
 const GRID = 0.01; // ~1.1 กม. ปัดพิกัดเพื่อไม่ให้ระบุแปลงได้
 
@@ -198,21 +196,13 @@ export async function checkServer() {
   if (!API) return { state: 'no-api', text: 'ยังไม่ได้ตั้งค่า VITE_COMMUNITY_API ใน Vercel' };
   try {
     const r = await callApi({ action: 'ping' }, 2, 20000);
-    if (!r) return { state: 'bad', text: 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ' };
-    if (r.ok === false) return { state: 'bad', text: 'สคริปต์ทำงานแต่มีข้อผิดพลาด: ' + (r.error || 'ไม่ทราบสาเหตุ') };
+    if (!r || !r.ok) return { state: 'bad', text: 'เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ' };
     if (!r.v || r.v < MIN_SERVER_VERSION) {
       return { state: 'old', text: 'สคริปต์ Apps Script ยังเป็นเวอร์ชันเก่า (ต้องวางโค้ด Code.gs ใหม่แล้ว Deploy เป็น New version)' };
     }
     return { state: 'ok', text: 'เชื่อมต่อเซิร์ฟเวอร์ปกติ (เวอร์ชัน ' + r.v + ') มีรายงานที่ยังใช้งานอยู่ ' + (r.activeReports || 0) + ' รายการ', data: r };
   } catch (e) {
-    const d = await diagnoseApi();
-    let text;
-    if (d.kind === 'login') text = 'สคริปต์ยังไม่เปิดให้ทุกคนเข้าถึง: ใน Deploy ให้ตั้ง "ผู้ที่มีสิทธิ์เข้าถึง" เป็น "ทุกคน" (Anyone)';
-    else if (d.kind === 'auth') text = 'สคริปต์ยังไม่ได้รับอนุญาตสิทธิ์: เปิดหน้า Apps Script เลือกฟังก์ชัน setup แล้วกด "เรียกใช้" และกดอนุญาต จากนั้น Deploy เป็น New version';
-    else if (d.kind === 'json') text = 'เซิร์ฟเวอร์ตอบได้แต่เวอร์ชัน ' + ((d.data && d.data.v) || 'เก่า') + ' ต้อง Deploy โค้ดใหม่ (Version: New version)';
-    else if (d.kind === 'html') text = 'URL นี้ไม่ได้ตอบเป็นข้อมูลของแอป (' + (d.snippet || 'หน้าเว็บ') + ') ตรวจว่าเป็น URL ของ Web app ที่ลงท้าย /exec และ Deploy โค้ดล่าสุดแล้ว';
-    else text = 'เบราว์เซอร์ในเครื่องนี้ติดต่อเซิร์ฟเวอร์ไม่ได้ ตรวจอินเทอร์เน็ต หรือ URL ใน Vercel และสิทธิ์ "ทุกคน"';
-    return { state: 'down', text: text, kind: d.kind };
+    return { state: 'down', text: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจว่า Deploy เป็น Web app แล้ว ตั้งสิทธิ์ "Anyone" และ URL ใน Vercel ลงท้าย /exec' };
   }
 }
 
@@ -234,7 +224,7 @@ export async function fetchNearby(plot, radiusKm, days) {
         rows = j.rows;
         nearbyStatus = { ok: true, error: '', serverCount: rows.length, at: Date.now(), v: j.v || 0 };
       } else {
-        nearbyStatus.error = (j && j.error) || 'bad-response';
+        nearbyStatus.error = 'bad-response';
       }
     } catch (e) { nearbyStatus.error = (e && e.message) || 'error'; rows = []; }
   }

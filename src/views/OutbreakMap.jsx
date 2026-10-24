@@ -6,7 +6,7 @@ const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
 
 let leafletPromise = null;
-export function loadLeaflet() {
+function loadLeaflet() {
   if (typeof window !== 'undefined' && window.L) return Promise.resolve(window.L);
   if (leafletPromise) return leafletPromise;
   leafletPromise = new Promise(function (resolve, reject) {

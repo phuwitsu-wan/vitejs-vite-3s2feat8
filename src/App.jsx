@@ -12,7 +12,6 @@ import { backupAvailable, isAutoBackup, cloudBackup, markChanged, needsBackupRem
 import { fetchNearby, summarizeNearby, syncUser, syncPendingReports } from './lib/community.js';
 import { reverseProvince } from './lib/weather.js';
 import { addDays } from './lib/date.js';
-import { detectInApp, openInBrowser, cleanUrl, cleanAddressBar, copyToClipboard } from './lib/platform.js';
 
 import Home from './views/Home.jsx';
 import CalendarView from './views/CalendarView.jsx';
@@ -95,7 +94,6 @@ export default function App() {
     let dead = false;
     const run = async function () {
       let rows = [];
-      try { await syncPendingReports(); } catch (e) { /* ignore */ }
       try { rows = await fetchNearby(plot, 5, 14); } catch (e) { rows = []; }
       if (dead) return;
       const same = rows.filter(function (x) { return x.crop === plot.crop; });
@@ -126,25 +124,6 @@ export default function App() {
   const firstDataRef = useRef(true);
   const [bkDismissed, setBkDismissed] = useState(false);
   const [plotMenu, setPlotMenu] = useState(false);
-  // เปิดผ่านแอป Facebook/Instagram/LINE: แจ้งให้ย้ายไปเบราว์เซอร์ (GPS มักใช้ไม่ได้ในแอปเหล่านั้น)
-  const envInfo = useMemo(function () { return detectInApp(); }, []);
-  const [envDismissed, setEnvDismissed] = useState(function () {
-    try { return sessionStorage.getItem('cs_env_dismissed') === '1'; } catch (e) { return false; }
-  });
-  const [envMsg, setEnvMsg] = useState('');
-  useEffect(function () { cleanAddressBar(); }, []);
-  // แจ้งเตือนในแอป (ใช้ได้แม้เปิดผ่านแอป LINE ที่ไม่รองรับ Notification ของเบราว์เซอร์)
-  const [toasts, setToasts] = useState([]);
-  useEffect(function () {
-    const onToast = function (ev) {
-      const d = ev.detail || {};
-      const id = d.at + '-' + Math.random().toString(36).slice(2, 6);
-      setToasts(function (prev) { return prev.concat([{ id: id, title: d.title, body: d.body, tab: d.tab }]).slice(-3); });
-      setTimeout(function () { setToasts(function (prev) { return prev.filter(function (t) { return t.id !== id; }); }); }, 9000);
-    };
-    window.addEventListener('cs-toast', onToast);
-    return function () { window.removeEventListener('cs-toast', onToast); };
-  }, []);
   const switchRef = useRef(null);
   // เลื่อนแถบแปลงให้เห็นแปลงที่เลือกอยู่เสมอ
   useEffect(function () {
@@ -216,8 +195,6 @@ export default function App() {
     const plot = Object.assign({}, p, { id: store.uuid(), createdAt: Date.now() });
     setPlots(function (prev) { return prev.concat([plot]); });
     setActivePlotId(plot.id);
-    // สร้างแปลงครั้งแรก/ครั้งใหม่ บันทึกผู้ใช้ลงชีตทันที ไม่ต้องรอ
-    syncUser(plots.concat([plot]));
     if (p.plantedAt) {
       setActivities(function (prev) {
         return [{ id: store.uuid(), plotId: plot.id, type: 'plant', date: p.plantedAt, note: 'เริ่มรอบการผลิต ' + CROPS[p.crop].name, createdAt: Date.now() }].concat(prev);
@@ -304,41 +281,6 @@ export default function App() {
         </div>
       )}
 
-      {envInfo.inApp && !envDismissed && (
-        <div className="env-banner">
-          <div className="small"><b>คุณเปิดผ่านแอป {envInfo.name}</b> ซึ่งมักใช้ GPS ไม่ได้ แนะนำให้เปิดในเบราว์เซอร์ (Chrome/Safari)</div>
-          {envMsg ? <div className="small mt">{envMsg}</div> : null}
-          <div className="row gap mt">
-            <button className="btn btn-sm flex1" onClick={function () { setEnvMsg(openInBrowser()); }}>เปิดในเบราว์เซอร์</button>
-            <button className="btn btn-sm flex1" onClick={async function () {
-              const ok = await copyToClipboard(cleanUrl(window.location.href));
-              setEnvMsg(ok ? 'คัดลอกลิงก์แล้ว นำไปวางในเบราว์เซอร์ได้เลย' : 'คัดลอกไม่สำเร็จ กรุณากดค้างที่แถบที่อยู่เพื่อคัดลอกเอง');
-            }}>คัดลอกลิงก์</button>
-            <button className="btn btn-sm" onClick={function () {
-              setEnvDismissed(true);
-              try { sessionStorage.setItem('cs_env_dismissed', '1'); } catch (e) { /* ignore */ }
-            }}>ไว้ทีหลัง</button>
-          </div>
-        </div>
-      )}
-
-      {toasts.length > 0 && (
-        <div className="toast-stack">
-          {toasts.map(function (t) {
-            return (
-              <div key={t.id} className="toast" onClick={function () {
-                if (t.tab) setTab(t.tab);
-                setToasts(function (prev) { return prev.filter(function (x) { return x.id !== t.id; }); });
-              }}>
-                <b>{'\u{1F6A8}'} {t.title}</b>
-                <div className="small">{t.body}</div>
-                {t.tab ? <div className="small muted">แตะเพื่อดูรายละเอียด</div> : null}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
       <main className="content">
         {noPlots || tab === 'plots' ? (
           <PlotsView plots={plots} activePlotId={activePlot ? activePlot.id : null} activities={activities}
@@ -366,7 +308,7 @@ export default function App() {
           {TABS.map(function (t) {
             return (
               <button key={t.key} className={'tab ' + (tab === t.key ? 'tab-active' : '')} onClick={function () { setTab(t.key); }}>
-                <span className="tab-icon">{t.emoji}{t.key === 'area' && nearby.length > 0 ? <i className="tab-dot" /> : null}</span><span>{t.label}</span>
+                <span className="tab-icon">{t.emoji}</span><span>{t.label}</span>
               </button>
             );
           })}

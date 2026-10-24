@@ -39,3 +39,13 @@ export function openExternal(url) {
   } catch (e) { console.warn(e); }
   window.open(url, '_blank');
 }
+
+export async function shareText(text) {
+  const msg = { type: 'text', text: text };
+  if (liffState.mock) { window.alert('โหมดทดสอบ ข้อความที่จะส่ง\n\n' + text); return; }
+  try {
+    if (liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')) await liff.shareTargetPicker([msg]);
+    else if (liff.isInClient && liff.isInClient()) await liff.sendMessages([msg]);
+    else window.alert(text);
+  } catch (e) { console.error(e); window.alert(text); }
+}
