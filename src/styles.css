@@ -392,3 +392,20 @@ input:focus,select:focus,textarea:focus{border-color:var(--green)}
 .tab-icon{position:relative}
 .tab-dot{position:absolute;top:-2px;right:-6px;width:9px;height:9px;border-radius:50%;background:#E53935;border:2px solid #fff}
 .notify-note{margin-top:6px;padding:8px 10px;background:#FFF4E5;color:#8A4B00;border-radius:10px}
+
+/* เลือกตำแหน่งแปลง */
+.locpick .lp-note{background:#FFF4E5;color:#7A4300;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13px}
+.lp-msg{padding:9px 12px;border-radius:10px;font-size:13px;margin-top:8px}
+.lp-ok{background:#E8F7EE;color:#116B33}
+.lp-warn{background:#FFF4E5;color:#8A4B00}
+.lp-info{background:#EEF3F7;color:#34495e}
+.lp-map{position:relative;isolation:isolate;height:300px;margin:8px 0;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#e8efe9;touch-action:none}
+.lp-input{padding:10px;border:1px solid var(--line);border-radius:10px;font-size:16px;min-width:0}
+.lp-results{border:1px solid var(--line);border-radius:10px;margin-top:6px;overflow:hidden;background:#fff}
+.lp-results button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:10px;font-size:13.5px;cursor:pointer}
+.lp-results button:last-child{border-bottom:0}
+.lp-more{margin-top:10px;font-size:13.5px}
+.lp-more summary{cursor:pointer;color:#1565C0;padding:4px 0}
+.btn-on{background:#E8F7EE;border-color:var(--green)}
+
+.env-banner{margin:10px 14px 0;padding:10px 12px;background:#FFF4E5;color:#7A4300;border-radius:12px}

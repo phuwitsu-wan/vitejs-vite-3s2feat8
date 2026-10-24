@@ -1,3 +1,4 @@
+import { copyToClipboard } from '../lib/platform.js';
 import React, { useState } from 'react';
 import { fetchHistory, weatherIcon } from '../lib/weather.js';
 import { summarize, monthlySummary, dailyReportText, buildPlanReport, planReportText, stageWatchText } from '../lib/report.js';
@@ -29,8 +30,8 @@ export default function ReportView({ plot, derived, activities }) {
   };
 
   const copyText = async function (txt) {
-    try { await navigator.clipboard.writeText(txt); window.alert('คัดลอกรายงานแล้ว'); }
-    catch (e) { window.prompt('คัดลอกข้อความด้านล่าง', txt); }
+    if (await copyToClipboard(txt)) window.alert('คัดลอกรายงานแล้ว');
+    else window.prompt('คัดลอกข้อความด้านล่าง', txt);
   };
 
   const renderTaskRow = function (x, past) {

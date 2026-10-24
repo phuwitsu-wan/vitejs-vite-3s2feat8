@@ -12,6 +12,7 @@ import { backupAvailable, isAutoBackup, cloudBackup, markChanged, needsBackupRem
 import { fetchNearby, summarizeNearby, syncUser, syncPendingReports } from './lib/community.js';
 import { reverseProvince } from './lib/weather.js';
 import { addDays } from './lib/date.js';
+import { detectInApp, openInBrowser, cleanUrl, cleanAddressBar, copyToClipboard } from './lib/platform.js';
 
 import Home from './views/Home.jsx';
 import CalendarView from './views/CalendarView.jsx';
@@ -125,6 +126,13 @@ export default function App() {
   const firstDataRef = useRef(true);
   const [bkDismissed, setBkDismissed] = useState(false);
   const [plotMenu, setPlotMenu] = useState(false);
+  // เปิดผ่านแอป Facebook/Instagram/LINE: แจ้งให้ย้ายไปเบราว์เซอร์ (GPS มักใช้ไม่ได้ในแอปเหล่านั้น)
+  const envInfo = useMemo(function () { return detectInApp(); }, []);
+  const [envDismissed, setEnvDismissed] = useState(function () {
+    try { return sessionStorage.getItem('cs_env_dismissed') === '1'; } catch (e) { return false; }
+  });
+  const [envMsg, setEnvMsg] = useState('');
+  useEffect(function () { cleanAddressBar(); }, []);
   // แจ้งเตือนในแอป (ใช้ได้แม้เปิดผ่านแอป LINE ที่ไม่รองรับ Notification ของเบราว์เซอร์)
   const [toasts, setToasts] = useState([]);
   useEffect(function () {
@@ -293,6 +301,24 @@ export default function App() {
           <span>ข้อมูลแปลงของคุณยังไม่ได้สำรอง ถ้าเปลี่ยนมือถือข้อมูลจะหาย</span>
           <button className="btn btn-sm" onClick={function () { setTab('plots'); }}>สำรองเลย</button>
           <button className="bk-x" aria-label="ปิด" onClick={function () { setBkDismissed(true); }}>{'\u2715'}</button>
+        </div>
+      )}
+
+      {envInfo.inApp && !envDismissed && (
+        <div className="env-banner">
+          <div className="small"><b>คุณเปิดผ่านแอป {envInfo.name}</b> ซึ่งมักใช้ GPS ไม่ได้ แนะนำให้เปิดในเบราว์เซอร์ (Chrome/Safari)</div>
+          {envMsg ? <div className="small mt">{envMsg}</div> : null}
+          <div className="row gap mt">
+            <button className="btn btn-sm flex1" onClick={function () { setEnvMsg(openInBrowser()); }}>เปิดในเบราว์เซอร์</button>
+            <button className="btn btn-sm flex1" onClick={async function () {
+              const ok = await copyToClipboard(cleanUrl(window.location.href));
+              setEnvMsg(ok ? 'คัดลอกลิงก์แล้ว นำไปวางในเบราว์เซอร์ได้เลย' : 'คัดลอกไม่สำเร็จ กรุณากดค้างที่แถบที่อยู่เพื่อคัดลอกเอง');
+            }}>คัดลอกลิงก์</button>
+            <button className="btn btn-sm" onClick={function () {
+              setEnvDismissed(true);
+              try { sessionStorage.setItem('cs_env_dismissed', '1'); } catch (e) { /* ignore */ }
+            }}>ไว้ทีหลัง</button>
+          </div>
         </div>
       )}
 
