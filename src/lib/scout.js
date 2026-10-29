@@ -80,7 +80,7 @@ export function pickScoutTargets(crop, stageKey, f) {
   const hits = [];
   for (let i = 0; i < list.length; i++) {
     const t = list[i];
-    if (t.stages && stageKey && t.stages.indexOf(stageKey) < 0) continue;
+    if (t.stages && stageKey && !([].concat(stageKey)).some(function (k) { return t.stages.indexOf(k) >= 0; })) continue;
     const m = matchWhen(t.when, f);
     if (!m.ok) continue;
     hits.push({

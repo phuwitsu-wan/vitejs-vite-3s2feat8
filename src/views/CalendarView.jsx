@@ -4,6 +4,7 @@ import { ymd, addDays, thaiMonthYear, thaiDate, thaiDow, today, diffDays, toDate
 import { weatherIcon } from '../lib/weather.js';
 import { stageOnDate, stageSegments } from '../lib/agronomy.js';
 import { fertilizerForAge } from '../data/fertilizer.js';
+import { bioForStage, bioSourceLabel } from '../data/biocontrol.js';
 import { rulesForCrop } from '../data/alertRules.js';
 import { phiChemicalsForCrop } from '../data/phiChemicals.js';
 import CropIcon from './CropIcon.jsx';
@@ -95,8 +96,11 @@ export default function CalendarView({ plot, derived, activities, weather }) {
   if (pct < 0) pct = 0;
   if (pct > 100) pct = 100;
 
-  const selMonth = toDate(selected).getMonth() + 1;
+  const selMonth = ((toDate(selected).getMonth() - (crop.shift || 0)) % 12 + 12) % 12 + 1;
   const fert = (selStage.afterHarvest || selStage.beforeStart) ? { items: [], note: '', all: [] } : fertilizerForAge(crop.id, age, selMonth);
+  const fertOrg = fertilizerForAge(crop.id, 0, selMonth).organic || [];
+  const stageKeyNow = (selStage.afterHarvest || selStage.beforeStart || !selStage.stage) ? null : selStage.stage.key;
+  const bios = stageKeyNow ? bioForStage(crop.id, stageKeyNow) : [];
   const pests = (selStage.afterHarvest || selStage.beforeStart) ? [] : rulesForCrop(crop.id, selStage.stage ? selStage.stage.key : null);
 
   const typesInSeason = {};
@@ -301,7 +305,10 @@ export default function CalendarView({ plot, derived, activities, weather }) {
                   <div className="fert-row"><span>สูตรหลัก</span><b>{f.formula}</b></div>
                   <div className="fert-row"><span>อัตราใช้</span><b className="fert-rate">{f.rate}</b></div>
                   {f.altFormula && (
-                    <div className="fert-row"><span>สูตรทางเลือก</span><span>{f.altFormula} · {f.altRate}</span></div>
+                    <div className="fert-row"><span>ทางเลือก 2</span><span>{f.altFormula} · {f.altRate}</span></div>
+                  )}
+                  {f.alt3Formula && (
+                    <div className="fert-row"><span>ทางเลือก 3</span><span>{f.alt3Formula} · {f.alt3Rate}</span></div>
                   )}
                   <div className="fert-row"><span>วิธีใส่</span><span className="fert-method">{f.method}</span></div>
                   {f.soilNote && <div className="small muted mt">ปรับตามดิน: {f.soilNote}</div>}
@@ -318,12 +325,21 @@ export default function CalendarView({ plot, derived, activities, weather }) {
                 <div key={i} className="fert-line">
                   <div className="fert-line-when">{f.when}</div>
                   <div className="small">{f.formula} · <b>{f.rate}</b></div>
-                  {f.altFormula && <div className="small muted">ทางเลือก: {f.altFormula} · {f.altRate}</div>}
+                  {f.altFormula && <div className="small muted">ทางเลือก 2: {f.altFormula} · {f.altRate}</div>}
+                  {f.alt3Formula && <div className="small muted">ทางเลือก 3: {f.alt3Formula} · {f.alt3Rate}</div>}
                   <div className="small muted">{f.method}</div>
                 </div>
               );
             })}
             <div className="small muted mt">หมายเหตุ {fert.note || fertilizerForAge(crop.id, 0, selMonth).note}</div>
+          </div>
+        )}
+        {fertOrg.length > 0 && (
+          <div className="fert-box mt">
+            <div className="fert-when">ปุ๋ยอินทรีย์/ชีวภาพทางเลือก (ใช้ทดแทนเคมีบางส่วน)</div>
+            {fertOrg.map(function (o, i) {
+              return <div key={i} className="small"><b>{o.name}</b> · {o.rate}<div className="muted">{o.note}</div></div>;
+            })}
           </div>
         )}
       </section>
@@ -379,8 +395,26 @@ export default function CalendarView({ plot, derived, activities, weather }) {
       </section>
 
       <section className="card">
+        <div className="card-title">ชีวภัณฑ์ที่ใช้ได้ในระยะนี้ <span className="badge">{bios.length}</span></div>
+        {bios.length === 0
+          ? <p className="muted small">ยังไม่มีรายการชีวภัณฑ์เฉพาะระยะนี้ ใช้การสำรวจและอนุรักษ์ศัตรูธรรมชาติเป็นหลัก</p>
+          : bios.map(function (b, i) {
+            return (
+              <div key={i} className="fert-box">
+                <div className="fert-when">{b.target}</div>
+                <div className="fert-row"><span>ชีวภัณฑ์</span><b>{b.agent}</b></div>
+                <div className="fert-row"><span>อัตรา</span><span>{b.rate}</span></div>
+                <div className="fert-row"><span>วิธีใช้</span><span className="fert-method">{b.how}</span></div>
+                <div className="small muted">แหล่งข้อมูล: {bioSourceLabel(b.src)}</div>
+              </div>
+            );
+          })}
+        <div className="small muted mt">ชีวภัณฑ์ออกฤทธิ์ช้ากว่าสารเคมี ใช้เชิงป้องกันและเมื่อพบศัตรูพืชระยะแรก อ่านฉลากและเก็บรักษาตามคำแนะนำผลิตภัณฑ์</div>
+      </section>
+
+      <section className="card">
         <div className="card-title">ไทม์ไลน์ระยะการเจริญเติบโต</div>
-        <div className="small muted">สีของแต่ละจุดแสดงความคืบหน้าจริงตามความร้อนสะสม (GDD) ของระยะนั้น เทาเข้ม = ยังไม่เริ่ม ไล่ไปเหลือง-เขียวตามสัดส่วนที่สะสมได้แล้ว เขียวเข้ม = ผ่านระยะนั้นแล้ว</div>
+        <div className="small muted">สีของแต่ละจุดแสดงความคืบหน้าของระยะนั้นตามช่วงเวลาจริง เทา = ยังไม่เริ่ม เหลือง-เขียวตามสัดส่วนที่ผ่านไปแล้ว เขียวเข้ม = ผ่านระยะนั้นแล้ว</div>
         <div className="timeline">
           {derived.timeline.map(function (s) {
             const seg = (derived.segments || []).find(function (x) { return x.key === s.key; });

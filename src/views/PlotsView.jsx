@@ -7,6 +7,7 @@ import BackupCard from './BackupCard.jsx';
 import { utmToLatLon } from '../lib/utm.js';
 import About from './About.jsx';
 import CropIcon from './CropIcon.jsx';
+import { isOrchard, cycleStartFor, monthName } from '../lib/orchard.js';
 
 const EMPTY = { name: '', crop: 'rice', plantedAt: today(), areaRai: '', lat: null, lon: null, locationName: '', waterMode: 'irrigated' };
 const UTM_EMPTY = { zone: '47', band: 'P', easting: '', northing: '' };
@@ -44,7 +45,12 @@ export default function PlotsView({ plots, activePlotId, onAdd, onRemove, onSele
   const submit = function (e) {
     e.preventDefault();
     if (form.lat === null || form.lon === null) { window.alert('กรุณาระบุตำแหน่งแปลงก่อน'); return; }
-    onAdd(Object.assign({}, form, { areaRai: form.areaRai ? Number(form.areaRai) : null }));
+    const payload = Object.assign({}, form, { areaRai: form.areaRai ? Number(form.areaRai) : null });
+    if (isOrchard(crop)) {
+      payload.shift = crop.stageMode === 'month' ? (form.shift || 0) : 0;
+      payload.plantedAt = cycleStartFor(crop, form.shift || 0, today());
+    } else { delete payload.shift; }
+    onAdd(payload);
     setForm(EMPTY); setShowForm(false); setGeoMsg('');
   };
 
@@ -70,7 +76,7 @@ export default function PlotsView({ plots, activePlotId, onAdd, onRemove, onSele
                 <button className="flex1 plot-pick" onClick={function () { onSelect(p.id); }}>
                   <div className="task-title">{CROPS[p.crop] ? <CropIcon crop={CROPS[p.crop]} /> : ''} {p.name}</div>
                   <div className="small muted">
-                    {CROPS[p.crop] ? CROPS[p.crop].name : p.crop} · เริ่ม {thaiDate(p.plantedAt)} · {p.areaRai || '-'} ไร่
+                    {CROPS[p.crop] ? CROPS[p.crop].name : p.crop} · {CROPS[p.crop] && CROPS[p.crop].orchard ? 'รอบเริ่ม ' : 'เริ่ม '}{thaiDate(p.plantedAt)} · {p.areaRai || '-'} ไร่
                   </div>
                   <div className="small muted">{p.locationName || p.lat.toFixed(4) + ', ' + p.lon.toFixed(4)}</div>
                 </button>
@@ -103,7 +109,7 @@ export default function PlotsView({ plots, activePlotId, onAdd, onRemove, onSele
                   return (
                     <button type="button" key={c.id}
                       className={'crop-btn ' + (form.crop === c.id ? 'crop-active' : '')}
-                      onClick={function () { setForm(Object.assign({}, form, { crop: c.id })); }}>
+                      onClick={function () { setForm(Object.assign({}, form, { crop: c.id, shift: 0 })); }}>
                       <span className="crop-icon"><CropIcon crop={c} /></span>{c.name}
                     </button>
                   );
@@ -127,11 +133,37 @@ export default function PlotsView({ plots, activePlotId, onAdd, onRemove, onSele
               </div>
             )}
 
-            <label className="field">
-              <span>{crop.anchorLabel || 'วันที่ปลูก หว่าน หรือย้ายกล้า'}</span>
-              <input type="date" value={form.plantedAt} max={today()}
-                onChange={function (e) { setForm(Object.assign({}, form, { plantedAt: e.target.value })); }} required />
-            </label>
+            {isOrchard(crop) ? (
+              <div className="field">
+                <span>ไม้ผลมีรอบการผลิตวนซ้ำทุกปี เลือกเดือนที่เก็บเกี่ยวผลผลิตหลัก (แนะนำ) ระบบจะจัดปฏิทินให้ทั้งรอบ</span>
+                <div className="grid2">
+                  <label>
+                    <span className="small muted">เดือนเก็บเกี่ยวหลัก</span>
+                    <select value={((crop.orchard.harvestMonth - 1 + (form.shift || 0)) % 12 + 12) % 12 + 1}
+                      onChange={function (e) { setForm(Object.assign({}, form, { shift: ((Number(e.target.value) - crop.orchard.harvestMonth) % 12 + 12) % 12 })); }}>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return <option key={m} value={m}>{monthName(m)}</option>; })}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="small muted">เดือนตัดแต่งกิ่ง (เริ่มรอบ)</span>
+                    <select value={((crop.orchard.pruneMonth - 1 + (form.shift || 0)) % 12 + 12) % 12 + 1}
+                      onChange={function (e) { setForm(Object.assign({}, form, { shift: ((Number(e.target.value) - crop.orchard.pruneMonth) % 12 + 12) % 12 })); }}>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return <option key={m} value={m}>{monthName(m)}</option>; })}
+                    </select>
+                  </label>
+                </div>
+                <div className="small muted">
+                  ค่าเริ่มต้นของ{crop.name}: เก็บเกี่ยว {monthName(crop.orchard.harvestMonth)} · ตัดแต่งกิ่ง {monthName(crop.orchard.pruneMonth)}
+                  {' '}· เลือกอย่างใดอย่างหนึ่ง อีกช่องจะปรับตามอัตโนมัติ
+                </div>
+              </div>
+            ) : (
+              <label className="field">
+                <span>{crop.anchorLabel || 'วันที่ปลูก หว่าน หรือย้ายกล้า'}</span>
+                <input type="date" value={form.plantedAt} max={today()}
+                  onChange={function (e) { setForm(Object.assign({}, form, { plantedAt: e.target.value })); }} required />
+              </label>
+            )}
 
             <label className="field">
               <span>พื้นที่ (ไร่)</span>

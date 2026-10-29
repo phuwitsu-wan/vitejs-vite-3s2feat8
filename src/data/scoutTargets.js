@@ -1,3 +1,4 @@
+import { mapDurianStages } from './durianStages.js';
 // เป้าหมายการสำรวจรายระยะ ผูกกับเงื่อนไขอากาศ
 // when: เงื่อนไขทั้งหมดต้องผ่านจึงจะถือว่า "ระบุชนิดได้"
 //   rhMin ความชื้นเฉลี่ย 7 วัน / rhNightMin ความชื้นกลางคืน
@@ -171,16 +172,33 @@ export const SCOUT_TARGETS = {
       method: 'สุ่มตรวจฝัก 20 ฝักต่อต้น เก็บฝักเสียออกจากสวน' }
   ],
   avocado: [
-    { key: 'phytophthora', name: 'โรครากเน่าไฟทอปธอรา', type: 'disease', stages: ['expand', 'oil'],
+    { key: 'phytophthora', name: 'โรครากเน่าไฟทอปธอรา', type: 'disease', stages: ['recover', 'flush', 'expand'],
       when: { rain7Min: 40, rhMin: 85 }, prio: 3,
       ett: 'พบต้นใบเหลืองซีดใบเล็กปลายกิ่งแห้งแม้ต้นเดียว',
       method: 'ตรวจทรงพุ่มและขุดดูรากฝอยบริเวณชายพุ่ม' },
-    { key: 'thrips', name: 'เพลี้ยไฟ', type: 'insect', stages: ['bloom', 'set'],
+    { key: 'thrips', name: 'เพลี้ยไฟ', type: 'insect', stages: ['bloom', 'set', 'expand'],
       when: { dryStreakMin: 5, tmaxMin: 32 }, prio: 3,
       ett: 'พบเกิน 5 ตัวต่อช่อ ทำให้ผิวผลกร้าน',
-      method: 'เคาะช่อดอกและผลอ่อนบนกระดาษขาว' }
+      method: 'เคาะช่อดอกและผลอ่อนบนกระดาษขาว' },
+    { key: 'anthracnose', name: 'โรคแอนแทรคโนส', type: 'disease', stages: ['set', 'expand', 'harvest'],
+      when: { rhMin: 85, rain7Min: 25 }, prio: 2,
+      ett: 'พบแผลกลมบุ๋มสีน้ำตาลถึงดำบนผลหรือใบ',
+      method: 'สุ่มตรวจผล 20 ผลและใบอ่อนรอบทรงพุ่ม' },
+    { key: 'fruitborer', name: 'หนอนเจาะผล/แมลงวันผลไม้', type: 'insect', stages: ['set', 'expand', 'harvest'],
+      when: { dryStreakMin: 3, tmaxMin: 30 }, prio: 2,
+      ett: 'พบผลมีรูเจาะหรือผลร่วงผิดปกติเกิน 5%',
+      method: 'เก็บผลร่วงตรวจผ่าดูภายใน แขวนกับดักล่อ' },
+    { key: 'sapsucker', name: 'เพลี้ยแมลงดูดยอดอ่อน', type: 'insect', stages: ['flush'],
+      when: { dryStreakMin: 3 }, prio: 1,
+      ett: 'พบยอดอ่อนหงิกงอ มีเพลี้ยเกาะเกิน 20% ของยอด',
+      method: 'สุ่มตรวจยอดอ่อน 20 ยอดต่อแปลง' }
   ]
 };
+SCOUT_TARGETS.durian.forEach(function (t) { if (t.stages) t.stages = mapDurianStages(t.stages); });
+SCOUT_TARGETS.ricePhoto = SCOUT_TARGETS.rice;
+SCOUT_TARGETS.avocadoLight = SCOUT_TARGETS.avocado;
+SCOUT_TARGETS.avocadoHeavy = SCOUT_TARGETS.avocado;
+SCOUT_TARGETS.macadamia = SCOUT_TARGETS.avocado;
 
 export const GENERIC_SCOUT = {
   key: 'generic',

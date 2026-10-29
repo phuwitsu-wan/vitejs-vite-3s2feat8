@@ -1,4 +1,5 @@
 import { CROPS } from '../data/crops.js';
+import { cropForPlot } from './orchard.js';
 import { ALERT_RULES, CONF_LABEL, TRIGGER_LABEL } from '../data/alertRules.js';
 import { today, diffDays } from './date.js';
 
@@ -67,7 +68,7 @@ export function evaluateAlerts(plot, series, stageInfo, activities) {
   for (let i = 0; i < series.length; i++) if (series[i].date === t) { idx = i; break; }
   if (idx < 0) return [];
 
-  const crop = CROPS[plot.crop];
+  const crop = cropForPlot(plot);
   if (!crop) return [];
   if (stageInfo && (stageInfo.afterHarvest || stageInfo.beforeStart)) return [];
 
@@ -82,12 +83,13 @@ export function evaluateAlerts(plot, series, stageInfo, activities) {
   }
 
   const stageKey = stageInfo && stageInfo.stage ? stageInfo.stage.key : null;
+  const conc = (stageInfo && stageInfo.concurrent) || [];
   const out = [];
 
   for (let i = 0; i < ALERT_RULES.length; i++) {
     const rule = ALERT_RULES[i];
     if (rule.crop !== crop.id) continue;
-    if (rule.stages && stageKey && rule.stages.indexOf(stageKey) < 0) continue;
+    if (rule.stages && stageKey && !(conc.length ? conc : [stageKey]).some(function (k) { return rule.stages.indexOf(k) >= 0; })) continue;
     if (!extraPass(series, idx, rule.extra)) continue;
 
     let level = null;

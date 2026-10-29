@@ -1,3 +1,4 @@
+import { monthPrimaryIdx } from './stageMonth.js';
 import { TEXTURE_INFO } from '../data/soilGuide.js';
 import { today, addDays, diffDays, thaiDate, ymd } from './date.js';
 
@@ -5,7 +6,7 @@ import { today, addDays, diffDays, thaiDate, ymd } from './date.js';
 const ROOT_DEPTH = {
   rice: 0.35, ricePhoto: 0.35, maize: 0.6, cassava: 0.8, chili: 0.4, mungbean: 0.5,
   sugarcane: 0.8, garlic: 0.3, cabbage: 0.35,
-  durian: 0.8, avocado: 0.7, avocadoLight: 0.7, avocadoHeavy: 0.7,
+  durian: 0.8, avocado: 0.7, avocadoLight: 0.7, avocadoHeavy: 0.7, macadamia: 0.8,
   tamarind: 0.9, mangoRipe: 0.9, mangoGreen: 0.9
 };
 const DEFAULT_AWC = 140;    // มม. ต่อเมตร กรณีไม่มีข้อมูลดิน
@@ -22,16 +23,15 @@ const DEFAULT_EFF_FACTOR = 75;
 function kcAtGdd(crop, gdd, date) {
   let kc = crop.stages[0].kc || 0.8;
   let stageName = crop.stages[0].name;
+  let hold = false;
   if (crop.stageMode === 'month') {
     const m = +date.slice(5, 7);
-    for (let i = 0; i < crop.stages.length; i++) {
-      const s = crop.stages[i];
-      if (s.months && s.months.indexOf(m) >= 0) { kc = s.kc; stageName = s.name; }
-    }
-    return { kc: kc, stageName: stageName };
+    const pi = monthPrimaryIdx(crop, m);
+    if (pi >= 0) { const s = crop.stages[pi]; kc = s.kc; stageName = s.name; hold = !!s.holdWater; }
+    return { kc: kc, stageName: stageName, hold: hold };
   }
-  for (let i = 0; i < crop.stages.length; i++) if (gdd >= crop.stages[i].gdd) { kc = crop.stages[i].kc; stageName = crop.stages[i].name; }
-  return { kc: kc, stageName: stageName };
+  for (let i = 0; i < crop.stages.length; i++) if (gdd >= crop.stages[i].gdd) { kc = crop.stages[i].kc; stageName = crop.stages[i].name; hold = !!crop.stages[i].holdWater; }
+  return { kc: kc, stageName: stageName, hold: hold };
 }
 
 // ET0 แบบ Hargreaves อย่างง่าย เพียงพอสำหรับการวางแผนระดับแปลง
@@ -103,7 +103,7 @@ export function buildWaterSeries(series, crop, plot, curve, lookback, forecast, 
     rows.push({
       date: r.date, isPast: r.date <= t, isToday: r.date === t,
       rain: +(r.rain || 0).toFixed(1), effRain: er,
-      et0: et0, kc: kc, etc: etc, stageName: stageInfo.stageName,
+      et0: et0, kc: kc, etc: etc, stageName: stageInfo.stageName, hold: !!stageInfo.hold,
       depletion: +D.toFixed(1),
       available: +(taw - D).toFixed(1),
       pctRaw: Math.round((D / raw) * 100),
@@ -141,7 +141,7 @@ export function buildWaterSeries(series, crop, plot, curve, lookback, forecast, 
   const amountMm = nextRow ? Math.round(nextRow.depletion) : Math.round(todayRow.depletion);
   const m3PerRai = Math.round(amountMm * MM_PER_RAI_M3);
   const totalM3 = plot.areaRai ? Math.round(m3PerRai * plot.areaRai) : null;
-  const daysAhead = nextDate ? diffDays(t, nextDate) : null;
+  let daysAhead = nextDate ? diffDays(t, nextDate) : null;
 
   // ผลรวมฝนที่ใช้ได้จริง vs ความต้องการน้ำของพืชตลอดช่วงพยากรณ์ที่เหลือ (ตั้งแต่วันนี้เป็นต้นไป)
   let rainSum = 0, etcSum = 0, futureDays = 0;
@@ -176,6 +176,17 @@ export function buildWaterSeries(series, crop, plot, curve, lookback, forecast, 
     advice = 'ความชื้นในดินยังเพียงพอ ใช้ไปแล้ว ' + todayRow.pctRaw + '% ของน้ำที่ยอมให้พืชดึงไปใช้ ' +
       (nextDate ? 'ครั้งถัดไปควรให้น้ำประมาณวันที่ ' + thaiDate(nextDate) + ' ปริมาณ ' + amountMm + ' มม.'
                 : 'ยังไม่ต้องให้น้ำในช่วงพยากรณ์นี้');
+  }
+
+  // ระยะงดน้ำชักนำดอก (เช่น อะโวคาโด): ไม่ตั้งเตือนให้น้ำ แต่ยังคำนวณสมดุลน้ำไว้ให้ดูความเครียดของต้นไม้
+  const holdNow = !!todayRow.hold;
+  if (holdNow) {
+    level = 'hold';
+    postponed = false;
+    advice = 'ระยะนี้เป็นช่วงงดน้ำเพื่อชักนำดอกตามปฏิทิน จึงไม่แนะนำให้น้ำตามสมดุลน้ำ ' +
+      (todayRow.pctRaw >= 100 ? 'แต่ดินแห้งมากแล้ว (ใช้น้ำไป ' + todayRow.pctRaw + '% ของค่าที่ยอมให้) ให้ดูอาการใบเหี่ยวและปรึกษาเจ้าหน้าที่ก่อนตัดสินใจให้น้ำ' : 'ติดตามอาการใบและตาดอกแทน');
+    nextDate = null;
+    daysAhead = null;
   }
 
   return {

@@ -3,13 +3,13 @@ import { TASK_META } from '../data/crops.js';
 import { thaiDate, relativeLabel, today, diffDays } from '../lib/date.js';
 import { weatherIcon } from '../lib/weather.js';
 import { openExternal } from '../lib/liff.js';
-import { RULE_SOURCE } from '../data/alertRules.js';
 import { notifySupported, notifyStatus, requestNotify, notifyEnabled, setNotifyEnabled, testNotify, notifyMode } from '../lib/notify.js';
 import WaterChart from './WaterChart.jsx';
 import StageBar from './StageBar.jsx';
 import PestImage from './PestImage.jsx';
 import About from './About.jsx';
 import CropIcon from './CropIcon.jsx';
+import { excessWaterCare } from '../lib/waterCare.js';
 
 export default function Home({ plot, weather, derived, loading, error, onRefresh, onLog, soil, soilAdvice, soilLoading, soilError, onLoadSoil }) {
   const [open, setOpen] = useState(null);
@@ -30,6 +30,7 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
   const stageInfo = derived.stageInfo;
   const alerts = derived.alerts;
   const water = derived.water;
+  const excess = excessWaterCare(water, derived.crop, today());
   const t = today();
   const series = weather.series;
   const todayRow = series.filter(function (r) { return r.date === t; })[0];
@@ -138,6 +139,17 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
           อายุพืช {dap} วัน คิดเป็น {cycleProgress}% ของรอบการผลิต
           {stageInfo.afterHarvest ? ' · เก็บเกี่ยวครบรอบแล้ว' : (stageInfo.next ? ' · ระยะถัดไป ' + stageInfo.next.name : '')}
         </div>
+
+        {stageInfo.photo && (
+          <div className={'card-note mt ' + (stageInfo.photo.hold ? 'warn' : '')} style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(120,160,60,.12)' }}>
+            <div className="small"><b>เกณฑ์ช่วงแสง (ข้าวไวแสง)</b> ออกดอกได้เมื่อกลางวันสั้นกว่า {stageInfo.photo.maxHours} ชม./วัน</div>
+            <div className="small muted">
+              วันนี้กลางวันยาว {stageInfo.photo.hours.toFixed(1)} ชม. ที่พิกัดแปลง
+              {stageInfo.photo.shortFrom ? ' · กลางวันสั้นกว่า ' + stageInfo.photo.maxHours + ' ชม. ตั้งแต่ ' + thaiDate(stageInfo.photo.shortFrom) : ''}
+              {stageInfo.photo.hold ? ' · ยังไม่ถึงวันออกดอก ระบบจึงค้างไว้ที่ระยะสร้างช่อดอก–ตั้งท้อง' : (stageInfo.photo.ok ? ' · ผ่านเกณฑ์แล้ว' : '')}
+            </div>
+          </div>
+        )}
 
         {!stageInfo.afterHarvest && derived.endDate && (
           <div className="harvest-forecast mt">
@@ -252,10 +264,21 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
               {water.summary.level === 'high' ? 'ต้องให้น้ำเสริม'
                 : water.summary.level === 'warn' ? 'เริ่มขาดน้ำ'
                   : water.summary.level === 'ok' ? 'สมดุลน้ำเหมาะสม'
-                    : water.summary.level === 'wet' ? 'น้ำเกินความต้องการ' : 'สิ้นสุดรอบการผลิต'}
+                    : water.summary.level === 'wet' ? 'น้ำเกินความต้องการ'
+                      : water.summary.level === 'hold' ? 'ระยะงดน้ำชักนำดอก' : 'สิ้นสุดรอบการผลิต'}
             </b>
             <div className="small">{water.summary.advice}</div>
           </div>
+          {excess.level !== 'none' && (
+            <div className={'water-advice ' + (excess.level === 'flood' ? 'wa-high' : 'wa-wet')}>
+              <b className="small">{excess.level === 'flood' ? 'ฝนหนักต่อเนื่อง เสี่ยงน้ำท่วมขัง' : 'ฝนมาก ดินอิ่มน้ำ ควรเตรียมระบายน้ำ'}</b>
+              <div className="small muted">ฝนย้อนหลัง 3 วัน {excess.past3} มม. · พยากรณ์ 3 วันหน้า {excess.next3} มม.</div>
+              <div className="small mt"><b>การระบายน้ำ</b></div>
+              <ul className="actions">{excess.drain.map(function (x, i) { return <li key={i}>{x}</li>; })}</ul>
+              <div className="small"><b>การดูแลหลังน้ำลด</b></div>
+              <ul className="actions">{excess.after.map(function (x, i) { return <li key={i}>{x}</li>; })}</ul>
+            </div>
+          )}
 
           {water.summary.level !== 'done' && (
             <>
@@ -350,7 +373,6 @@ export default function Home({ plot, weather, derived, loading, error, onRefresh
           </>
         )}
 
-        <div className="small muted mt">ที่มาของเกณฑ์ {RULE_SOURCE}</div>
       </section>
 
       <section className="card">

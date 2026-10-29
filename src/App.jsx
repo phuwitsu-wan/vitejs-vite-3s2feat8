@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { cropForPlot, rollPlot } from './lib/orchard.js';
 import { initLiff, liffState, closeApp } from './lib/liff.js';
 import * as store from './lib/storage.js';
 import { fetchWeatherSeries } from './lib/weather.js';
@@ -11,7 +12,7 @@ import { pushAlerts, pushNearby } from './lib/notify.js';
 import { backupAvailable, isAutoBackup, cloudBackup, markChanged, needsBackupReminder } from './lib/backup.js';
 import { fetchNearby, summarizeNearby, syncUser, syncPendingReports } from './lib/community.js';
 import { reverseProvince } from './lib/weather.js';
-import { addDays } from './lib/date.js';
+import { addDays, today } from './lib/date.js';
 import { detectInApp, openInBrowser, cleanUrl, cleanAddressBar, copyToClipboard } from './lib/platform.js';
 
 import Home from './views/Home.jsx';
@@ -72,7 +73,8 @@ export default function App() {
 
   const activePlot = useMemo(function () {
     const hit = plots.filter(function (p) { return p.id === activePlotId; })[0];
-    return hit || plots[0] || null;
+    const p0 = hit || plots[0] || null;
+    return p0 ? rollPlot(p0, today()) : null;
   }, [plots, activePlotId]);
 
   const refreshWeather = useCallback(async function (plot) {
@@ -186,7 +188,7 @@ export default function App() {
 
   const derived = useMemo(function () {
     if (!activePlot || !weather || !weather.series || !weather.series.length) return null;
-    const crop = CROPS[activePlot.crop];
+    const crop = cropForPlot(activePlot);
     if (!crop) return null;
 
     const curve = buildGddCurve(weather.series, activePlot);
@@ -209,7 +211,7 @@ export default function App() {
 
   const sAdvice = useMemo(function () {
     if (!activeSoil) return null;
-    return soilAdvice(activeSoil, activePlot ? CROPS[activePlot.crop] : null);
+    return soilAdvice(activeSoil, activePlot ? cropForPlot(activePlot) : null);
   }, [activeSoil, activePlot]);
 
   const addPlot = function (p) {

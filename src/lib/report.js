@@ -1,9 +1,12 @@
+import { monthPrimaryIdx } from './stageMonth.js';
 import { today, addDays, diffDays, thaiDate, thaiDateShort, ymd } from './date.js';
 import { TASK_META } from '../data/crops.js';
 import { SCOUT_TARGETS, GENERIC_SCOUT } from '../data/scoutTargets.js';
 import { PEST_GUIDE } from '../data/pestGuide.js';
 import { phiLocks } from '../data/phi.js';
 import { dateAtGdd, gddAtDate } from './agronomy.js';
+import { rulesForCrop } from '../data/alertRules.js';
+import { bioForStage } from '../data/biocontrol.js';
 
 const TH_MONTH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
@@ -79,6 +82,12 @@ export function stageWatchTable(crop, plot, curve) {
   const list = SCOUT_TARGETS[crop.id] || [];
   const guideList = PEST_GUIDE[crop.id] || [];
   const out = [];
+  // พืชที่ใช้เดือนกำหนดระยะ: เดือนปัจจุบันอยู่ในระยะใด (ระยะท้ายสุดที่มีเดือนนั้นชนะ ตรงกับตัวคำนวณระยะ)
+  let monthStageIdx = -1;
+  if (crop.stageMode === 'month') {
+    const mNow = new Date().getMonth() + 1;
+    monthStageIdx = monthPrimaryIdx(crop, mNow);
+  }
   for (let i = 0; i < crop.stages.length; i++) {
     const s = crop.stages[i];
     const n = crop.stages[i + 1];
@@ -90,11 +99,13 @@ export function stageWatchTable(crop, plot, curve) {
     out.push({
       key: s.key, name: s.name, gdd: s.gdd, kc: s.kc,
       startDate: start, endDate: end,
-      current: start && (!end || t < end) && t >= start,
+      current: crop.stageMode === 'month' ? i === monthStageIdx : !!(start && (!end || t < end) && t >= start),
       targets: targets.length ? targets.map(function (x) {
         return { name: x.name, type: x.type, ett: x.ett, method: x.method, when: whenText(x.when) };
       }) : [{ name: GENERIC_SCOUT.name, type: 'general', ett: GENERIC_SCOUT.ett, method: GENERIC_SCOUT.method, when: '-' }],
-      guide: guide
+      guide: guide,
+      calendarPests: rulesForCrop(crop.id, s.key).map(function (r) { return { name: r.name, kind: r.kind, rule: r.rule, chem: r.chem || [] }; }),
+      bio: bioForStage(crop.id, s.key)
     });
   }
   return out;
@@ -121,6 +132,14 @@ export function stageWatchText(plot, crop, watch) {
             L.push('    สาร: ' + (g.chem[k].g ? '[กลุ่ม ' + g.chem[k].g + '] ' : '') + g.chem[k].t);
           }
         }
+      }
+    }
+    if (w.calendarPests && w.calendarPests.length) {
+      L.push('  [เตือนตามอากาศ] ' + w.calendarPests.map(function (x) { return x.name; }).join(', '));
+    }
+    if (w.bio && w.bio.length) {
+      for (let j = 0; j < w.bio.length; j++) {
+        L.push('  [ชีวภัณฑ์] ' + w.bio[j].target + ' : ' + w.bio[j].agent + ' (' + w.bio[j].rate + ')');
       }
     }
     L.push('');

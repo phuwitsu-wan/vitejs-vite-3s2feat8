@@ -4,6 +4,9 @@ import { fetchHistory, weatherIcon } from '../lib/weather.js';
 import { summarize, monthlySummary, dailyReportText, buildPlanReport, planReportText, stageWatchText } from '../lib/report.js';
 import { thaiDate, thaiDateShort, thaiDow, today, diffDays } from '../lib/date.js';
 import { TASK_META } from '../data/crops.js';
+import OnePager from './OnePager.jsx';
+import { bioSourceLabel } from '../data/biocontrol.js';
+import { buildOnePager } from '../lib/onepager.js';
 
 export default function ReportView({ plot, derived, activities }) {
   const [tab, setTab] = useState('plan');
@@ -13,6 +16,7 @@ export default function ReportView({ plot, derived, activities }) {
   const [err, setErr] = useState('');
   const [limit, setLimit] = useState(60);
   const [openStage, setOpenStage] = useState(null);
+  const [showOP, setShowOP] = useState(false);
 
   if (!plot) return <div className="card">ยังไม่ได้เลือกแปลง</div>;
   if (!derived) return <div className="card skeleton">กำลังเตรียมข้อมูล</div>;
@@ -62,6 +66,7 @@ export default function ReportView({ plot, derived, activities }) {
 
   return (
     <>
+      {showOP && <OnePager op={buildOnePager(plot, crop, plan, derived)} onClose={function () { setShowOP(false); }} />}
       <section className="card">
         <div className="seg">
           <button className={'seg-btn ' + (tab === 'plan' ? 'seg-active' : '')} onClick={function () { setTab('plan'); }}>ปฏิทิน</button>
@@ -74,6 +79,7 @@ export default function ReportView({ plot, derived, activities }) {
         <>
           <section className="card report-cta">
             <div className="card-title">สรุปปฏิทินการผลิต แปลง {plot.name}</div>
+            <button className="btn btn-primary w-full" onClick={function () { setShowOP(true); }}>สร้างปฏิทินหน้าเดียว (A4 พิมพ์/PDF)</button>
             <div className="plan-head">
               <div className="plan-kpi"><b>{plan.gdd}</b><span>ความร้อนสะสม (GDD)</span></div>
               <div className="plan-kpi"><b>{plan.tasksTotal}</b><span>งานทั้งรอบการผลิต</span></div>
@@ -170,6 +176,17 @@ export default function ReportView({ plot, derived, activities }) {
                         </div>
                       );
                     })}
+                    {s.calendarPests && s.calendarPests.length > 0 && (
+                      <div className="small mt"><b>เตือนตามสภาพอากาศ:</b> {s.calendarPests.map(function (x) { return x.name; }).join(' · ')}</div>
+                    )}
+                    {s.bio && s.bio.length > 0 && (
+                      <div className="watch-item wi-gen">
+                        <div className="task-title">ชีวภัณฑ์ที่ใช้ได้ในระยะนี้</div>
+                        {s.bio.map(function (b, i) {
+                          return <div key={i} className="small">· <b>{b.agent}</b> → {b.target} ({b.rate}) <span className="muted">[{bioSourceLabel(b.src)}]</span></div>;
+                        })}
+                      </div>
+                    )}
                     {s.guide && s.guide.length > 0 && (
                       <div className="watch-guide">
                         <div className="small muted" style={{ marginTop: 10, marginBottom: 4 }}>

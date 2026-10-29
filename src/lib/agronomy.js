@@ -1,4 +1,7 @@
 import { CROPS } from '../data/crops.js';
+import { monthPrimaryIdx, monthConcurrentKeys } from './stageMonth.js';
+import { photoInfo } from './daylength.js';
+import { cropForPlot } from './orchard.js';
 import { today, addDays, diffDays, toDate, ymd } from './date.js';
 import { pickScoutTargets, scoutTitle, weatherFeatures } from './scout.js';
 import { phiLocks, harvestBlocked } from '../data/phi.js';
@@ -22,7 +25,7 @@ export function gddOfDay(row, crop) {
 }
 
 export function buildGddCurve(series, plot) {
-  const crop = CROPS[plot.crop];
+  const crop = cropForPlot(plot);
   const out = [];
   let cum = 0;
   for (let i = 0; i < series.length; i++) {
@@ -86,6 +89,89 @@ function monthAnchorDate(plot, month, day) {
   return d;
 }
 
+// ───────── ไม้ผลยืนต้น: ระยะอิงปฏิทิน (เดือน/จำนวนวัน) ไม่อิง GDD ─────────
+// ไทม์ไลน์ แถบความคืบหน้า และระยะปัจจุบัน ใช้ตัวคำนวณ "หน้าต่างเวลา" ชุดเดียวกันนี้ จึงสอดคล้องกันเสมอ
+export function isCalendarBasis(crop) {
+  return !!crop.perennial && (crop.stageMode === 'month' || crop.stageMode === 'dap');
+}
+function addMonthsStr(dateStr, n) {
+  const d = toDate(dateStr);
+  d.setMonth(d.getMonth() + n);
+  return ymd(d);
+}
+// คืนหน้าต่างเวลาของแต่ละระยะในรอบปัจจุบัน [{ idx, key, name, start, end }] เฉพาะระยะที่มีเดือนของตัวเอง
+// เดือนที่ระยะซ้อนกัน ให้ระยะท้ายสุดที่มีเดือนนั้นชนะ (กติกาเดียวกับตัวคำนวณระยะ)
+export function calendarWindows(crop, plot, dateStr) {
+  const t = dateStr || today();
+  if (crop.stageMode === 'dap') {
+    const out = [];
+    for (let i = 0; i < crop.stages.length; i++) {
+      const s = crop.stages[i];
+      const n = crop.stages[i + 1];
+      out.push({
+        idx: i, key: s.key, name: s.name,
+        start: addDaysStr(plot.plantedAt, s.dap),
+        end: addDaysStr(plot.plantedAt, n ? n.dap : crop.cycleDays)
+      });
+    }
+    return out;
+  }
+  if (crop.stages.length && crop.stages[0].span) {
+    // ไม้ผลที่ช่วงเดือนซ้อนกัน: หน้าต่างของแต่ละระยะ = ช่วงเดือนตามไฟล์ทั้งช่วง (ซ้อนกันได้)
+    const b = crop.stages[0].span[0];
+    const td0 = toDate(t);
+    let y0 = td0.getFullYear();
+    let cs0 = y0 + '-' + String(b).padStart(2, '0') + '-01';
+    if (cs0 > t) { y0--; cs0 = y0 + '-' + String(b).padStart(2, '0') + '-01'; }
+    return crop.stages.map(function (st, i) {
+      const off = (st.span[0] - b + 12) % 12;
+      const len = ((st.span[1] - st.span[0] + 12) % 12) + 1;
+      let start = addMonthsStr(cs0, off);
+      let end = addMonthsStr(start, len);
+      // ช่วงที่ต่อท้ายรอบก่อน (ข้ามปี) ที่ยังครอบคลุมวันนี้
+      const pStart = addMonthsStr(start, -12), pEnd = addMonthsStr(end, -12);
+      const inPrev = pStart <= t && t < pEnd;
+      if (inPrev) { start = pStart; end = pEnd; }
+      return { idx: i, key: st.key, name: st.name, start: start, end: end, overlap: true };
+    });
+  }
+  const own = crop.stages.map(function () { return []; });
+  for (let m = 1; m <= 12; m++) {
+    let owner = -1;
+    for (let i = 0; i < crop.stages.length; i++) {
+      if (crop.stages[i].months && crop.stages[i].months.indexOf(m) >= 0) owner = i;
+    }
+    if (owner >= 0) own[owner].push(m);
+  }
+  const vis = [];
+  for (let i = 0; i < own.length; i++) {
+    if (!own[i].length) continue;
+    // เดือนเริ่ม = เดือนแรกของช่วงต่อเนื่อง (เผื่อข้ามปี เช่น พ.ย.–ม.ค.)
+    let startM = own[i][0];
+    for (let k = 0; k < own[i].length; k++) {
+      const prev = own[i][k] === 1 ? 12 : own[i][k] - 1;
+      if (own[i].indexOf(prev) < 0) { startM = own[i][k]; break; }
+    }
+    vis.push({ idx: i, startM: startM });
+  }
+  if (!vis.length) return [];
+  const base = vis[0].startM;
+  const td = toDate(t);
+  let csYear = td.getFullYear();
+  let cs = csYear + '-' + String(base).padStart(2, '0') + '-01';
+  if (cs > t) { csYear--; cs = csYear + '-' + String(base).padStart(2, '0') + '-01'; }
+  const out = [];
+  for (let k = 0; k < vis.length; k++) {
+    const off = (vis[k].startM - base + 12) % 12;
+    const st = crop.stages[vis[k].idx];
+    out.push({ idx: vis[k].idx, key: st.key, name: st.name, start: addMonthsStr(cs, off), end: null });
+  }
+  for (let k = 0; k < out.length; k++) {
+    out[k].end = k + 1 < out.length ? out[k + 1].start : addMonthsStr(cs, 12);
+  }
+  return out;
+}
+
 export function maturityGdd(crop) {
   if (crop.gddMature) return crop.gddMature;
   const last = crop.stages[crop.stages.length - 1];
@@ -107,14 +193,13 @@ export function seasonEnd(crop, plot, curve) {
   return d;
 }
 
+export { monthPrimaryIdx, monthConcurrentKeys };
+
 export function stageKeyAtGdd(crop, gdd, date) {
   if (crop.stageMode === 'month') {
     const m = toDate(date).getMonth() + 1;
-    for (let i = 0; i < crop.stages.length; i++) {
-      const s = crop.stages[i];
-      if (s.months && s.months.indexOf(m) >= 0) return s.key;
-    }
-    return crop.stages[0].key;
+    const pi = monthPrimaryIdx(crop, m);
+    return pi >= 0 ? crop.stages[pi].key : crop.stages[0].key;
   }
   let key = crop.stages[0].key;
   for (let i = 0; i < crop.stages.length; i++) if (gdd >= crop.stages[i].gdd) key = crop.stages[i].key;
@@ -134,6 +219,7 @@ function computeStage(crop, plot, curve, dateStr) {
   const afterHarvest = !crop.perennial && !beforeStart && t > end;
 
   let idx = 0;
+  let photo = null;
   let basis = 'gdd';
   if (afterHarvest) {
     // สิ้นสุดรอบแล้วตามวันที่ (end ถูกยึดกรอบไว้แล้วใน seasonEnd) ไม่ต้องรอ GDD ไล่ตามทัน
@@ -143,9 +229,18 @@ function computeStage(crop, plot, curve, dateStr) {
   } else if (crop.stageMode === 'month') {
     basis = 'month';
     const m = toDate(t).getMonth() + 1;
+    const pi = monthPrimaryIdx(crop, m);
+    if (pi >= 0) idx = pi;
+    photo = photoInfo(crop, plot, t);
+    if (photo) {
+      const gi = crop.stages.findIndex(function (s) { return s.key === photo.gateKey; });
+      // ยังไม่ถึงวันที่กลางวันสั้นกว่าเกณฑ์ → ออกดอกไม่ได้ ค้างที่ระยะก่อนออกดอก (เฉพาะช่วงหลังครีษมายัน)
+      if (gi >= 0 && idx > gi && photo.shortFrom && t < photo.shortFrom && t.slice(5) >= '06-21') { idx = gi; photo.hold = true; }
+    }
+  } else if (crop.stageMode === 'dap' && isCalendarBasis(crop)) {
+    basis = 'dap';
     for (let i = 0; i < crop.stages.length; i++) {
-      const s = crop.stages[i];
-      if (s.months && s.months.indexOf(m) >= 0) idx = i;
+      if (age >= crop.stages[i].dap) idx = i;
     }
   } else {
     if (!curve.length) basis = 'dap';
@@ -156,11 +251,26 @@ function computeStage(crop, plot, curve, dateStr) {
 
   const stage = crop.stages[idx];
   const next = crop.stages[idx + 1] || null;
-  const nextDate = next ? (crop.stageMode === 'month'
-    ? monthAnchorDate(plot, next.months[0], 1)
-    : dateAtGdd(curve, plot, next.gdd)) : null;
+  let nextDate = null;
+  if (next && isCalendarBasis(crop)) {
+    const wins = calendarWindows(crop, plot, t);
+    for (let k = 0; k < wins.length; k++) { if (wins[k].start > t) { nextDate = wins[k].start; break; } }
+    if (!nextDate && crop.stageMode === 'dap') nextDate = addDaysStr(plot.plantedAt, next.dap);
+  } else if (next) {
+    nextDate = dateAtGdd(curve, plot, next.gdd);
+  }
+  if (photo && photo.hold && next) nextDate = photo.shortFrom;
   let pct = 100;
-  if (!afterHarvest && next && basis === 'gdd' && next.gdd > stage.gdd) {
+  if (!afterHarvest && basis === 'dap' && next && next.dap > stage.dap) {
+    pct = ((age - stage.dap) / (next.dap - stage.dap)) * 100;
+    if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+  } else if (!afterHarvest && basis === 'month') {
+    const w = calendarWindows(crop, plot, t).filter(function (x) { return x.idx === idx; })[0];
+    if (w) {
+      pct = ((toDate(t) - toDate(w.start)) / Math.max(1, toDate(w.end) - toDate(w.start))) * 100;
+      if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+    }
+  } else if (!afterHarvest && next && basis === 'gdd' && next.gdd > stage.gdd) {
     pct = ((gdd - stage.gdd) / (next.gdd - stage.gdd)) * 100;
     if (pct < 0) pct = 0; if (pct > 100) pct = 100;
   }
@@ -171,7 +281,9 @@ function computeStage(crop, plot, curve, dateStr) {
     pctToNext: Math.round(pct), basis: basis, endDate: end,
     maturityGdd: maturityGdd(crop),
     beforeStart: beforeStart,
-    afterHarvest: afterHarvest
+    afterHarvest: afterHarvest,
+    photo: photo,
+    concurrent: crop.stageMode === 'month' ? monthConcurrentKeys(crop, +t.slice(5, 7)) : [stage.key]
   };
 }
 
@@ -188,16 +300,35 @@ export function stageTimeline(crop, plot, curve) {
   const t = today();
   const end = seasonEnd(crop, plot, curve);
   const afterHarvest = !crop.perennial && t > plot.plantedAt && t > end;
+  if (isCalendarBasis(crop)) {
+    return calendarWindows(crop, plot, t).map(function (w) {
+      const reached = w.start <= t;
+      return { key: w.key, name: w.name, gdd: 0, date: w.start, end: w.end, done: reached, reached: reached };
+    });
+  }
   return crop.stages.map(function (s) {
-    const d = crop.stageMode === 'month'
-      ? monthAnchorDate(plot, s.months[0], 1)
-      : dateAtGdd(curve, plot, s.gdd);
-    return { key: s.key, name: s.name, gdd: s.gdd, date: d, done: afterHarvest || d <= t };
+    const d = dateAtGdd(curve, plot, s.gdd);
+    const reached = afterHarvest || d <= t;
+    return { key: s.key, name: s.name, gdd: s.gdd, date: d, done: reached, reached: reached };
   });
 }
 
 export function stageSegments(crop, plot, curve, dateStr) {
   const t = dateStr || today();
+  if (isCalendarBasis(crop)) {
+    const wins = calendarWindows(crop, plot, t);
+    const span = function (w) { return Math.max(1, (toDate(w.end) - toDate(w.start)) / 86400000); };
+    const tot = wins.reduce(function (a, w) { return a + span(w); }, 0) || 1;
+    return wins.map(function (w, wi) {
+      const lastWin = wi === wins.length - 1;
+      let fill = (toDate(t) - toDate(w.start)) / 86400000 / span(w) * 100;
+      if (fill < 0) fill = 0; if (fill > 100) fill = 100;
+      return {
+        key: w.key, name: w.name, startDate: w.start, endDate: w.end,
+        widthPct: span(w) / tot * 100, fillPct: fill, isNow: t >= w.start && (t < w.end || (lastWin && crop.stageMode === 'dap'))
+      };
+    });
+  }
   const gddNow = gddAtDate(curve, t);
   const total = maturityGdd(crop) * 1.05 || 1;
   const end = seasonEnd(crop, plot, curve);
@@ -275,7 +406,7 @@ function isDone(activities, plot, type, date) {
  * opts = { curve, waterPlan, soil }
  */
 export function generateTasks(plot, series, activities, opts) {
-  const crop = CROPS[plot.crop];
+  const crop = cropForPlot(plot);
   const o = opts || {};
   const curve = o.curve || buildGddCurve(series, plot);
   const end = seasonEnd(crop, plot, curve);
@@ -286,7 +417,8 @@ export function generateTasks(plot, series, activities, opts) {
   for (let i = 0; i < crop.tasks.length; i++) {
     const t = crop.tasks[i];
     if (t.mode && plot.waterMode && t.mode !== plot.waterMode) continue;
-    if (t.type === 'water' && o.waterPlan && o.waterPlan.managed) continue; // ข้อ 5 ให้สมดุลน้ำคุมแทน
+    // ข้อ 5 ให้สมดุลน้ำคุมแทน ยกเว้นงานที่ระบุ keep (เช่น งดน้ำชักนำดอกของอะโวคาโด ซึ่งสมดุลน้ำไม่รู้ว่าเป็นการงดโดยตั้งใจ)
+    if (t.type === 'water' && !t.keep && o.waterPlan && o.waterPlan.managed) continue;
 
     let base = resolveBaseDate(t, crop, plot, curve);
     let stopDate = end;
@@ -296,6 +428,11 @@ export function generateTasks(plot, series, activities, opts) {
       }
     }
     if (cutoff && t.type !== 'harvest' && stopDate > cutoff) stopDate = cutoff;
+    // forDays = งานที่ทำซ้ำเฉพาะช่วงสั้น ๆ ของระยะ (เช่น สำรวจเพลี้ยไฟช่วงดอกบาน) ไม่ให้ซ้ำยาวจนสิ้นรอบ
+    if (t.forDays) {
+      const lim = addDaysStr(base, t.forDays);
+      if (lim < stopDate) stopDate = lim;
+    }
 
     const dates = [base];
     if (t.repeatDays) {
@@ -336,7 +473,7 @@ export function generateTasks(plot, series, activities, opts) {
       // ข้อ 4 ระบุชนิดศัตรูพืชที่ต้องสำรวจตามระยะและอากาศ
       if (t.type === 'scout') {
         const f = weatherFeatures(series, d);
-        const stageKey = stageKeyAtGdd(crop, item.gddAt, d);
+        const stageKey = crop.stageMode === 'month' ? monthConcurrentKeys(crop, +d.slice(5, 7)) : stageKeyAtGdd(crop, item.gddAt, d);
         const pick = pickScoutTargets(crop, stageKey, f);
         item.title = scoutTitle(pick);
         item.generic = pick.generic;
